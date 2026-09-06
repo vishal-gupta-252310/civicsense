@@ -12,10 +12,12 @@
     </div>
 
     {% if form.non_field_errors %}
-    <div class="alert alert-danger py-2 small" role="alert">{{ form.non_field_errors }}</div>
+    <div class="alert alert-danger py-2 small" role="alert">
+      {% for err in form.non_field_errors %}{{ err }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+    </div>
     {% endif %}
 
-    <form method="post">
+    <form method="post" id="login-form">
       {% csrf_token %}
 
       <div class="field-group">
@@ -38,6 +40,7 @@
           </span>
           {{ form.password }}
         </div>
+        <a href="#" class="small text-muted" onclick="return false;">Forgot password?</a>
       </div>
 
       <button class="btn btn-primary w-100 py-2 mt-2" type="submit">Sign in</button>
@@ -47,4 +50,17 @@
     </form>
   </div>
 </div>
+
+<script>
+(function(){
+  var form = document.getElementById('login-form');
+  if (!form) return;
+  form.addEventListener('submit', function(){
+    var btn = form.querySelector('button[type=submit]');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+  });
+})();
+</script>
 {% endblock %}

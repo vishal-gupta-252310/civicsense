@@ -235,6 +235,13 @@
   }
 
   requestLocation();
+
+  var reportForm = document.getElementById('report-form');
+  reportForm.addEventListener('submit', function(){
+    if (submit.disabled) return;
+    submit.disabled = true;
+    submit.textContent = 'Submitting…';
+  });
 })();
 </script>
 {% endblock %}

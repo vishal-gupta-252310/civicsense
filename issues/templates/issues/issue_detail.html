@@ -63,7 +63,7 @@
         <div class="card p-4">
           <h5 class="mb-3">Progress</h5>
           {% if is_staff %}
-          <form method="post" class="mb-3">
+          <form method="post" class="mb-3" id="status-form">
             {% csrf_token %}
             {{ form.new_status }}
             <div class="mt-2">{{ form.note }}</div>
@@ -91,16 +91,35 @@
 
 <script>
 (function(){
+  var statusForm = document.getElementById('status-form');
+  if (statusForm) {
+    statusForm.addEventListener('submit', function(){
+      var btn = statusForm.querySelector('button[type=submit]');
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = 'Updating…';
+    });
+  }
   var form = document.getElementById('upvote-form');
   if (!form) return;
+  var btn = document.getElementById('upvote-btn');
+  var msg = document.getElementById('upvote-msg');
   form.addEventListener('submit', function(e){
     e.preventDefault();
+    btn.disabled = true;
+    btn.textContent = 'Updating…';
+    if (msg) msg.textContent = '';
     fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } })
       .then(function(r){ return r.json(); })
       .then(function(d){
         document.getElementById('upvote-count').textContent = d.count;
-        document.getElementById('upvote-btn').textContent = d.voted ? 'Remove upvote' : 'Upvote this issue';
-      });
+        btn.textContent = d.voted ? 'Remove upvote' : 'Upvote this issue';
+      })
+      .catch(function(){
+        btn.textContent = 'Try again';
+        if (msg) msg.textContent = 'Could not reach the server. Please try again.';
+      })
+      .finally(function(){ btn.disabled = false; });
   });
 })();
 </script>
