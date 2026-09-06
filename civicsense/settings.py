@@ -121,7 +121,10 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Store uploaded photos on Cloudinary when credentials are configured; otherwise
 # keep the local filesystem (development). Selected purely by configuration.
 if env("CLOUDINARY_CLOUD_NAME", default="") and env("CLOUDINARY_API_KEY", default=""):
-    STORAGES = {"default": {"BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"}}
+    STORAGES = {
+        "default": {"BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
     CLOUDINARY_STORAGE = {
         "CLOUD_NAME": env("CLOUDINARY_CLOUD_NAME"),
         "API_KEY": env("CLOUDINARY_API_KEY"),
