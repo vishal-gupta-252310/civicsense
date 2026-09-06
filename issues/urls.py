@@ -8,6 +8,7 @@ urlpatterns = [
     path("issue/<int:pk>/", views.issue_detail_view, name="issue_detail"),
     path("map/", views.map_view, name="map"),
     path("issue/<int:pk>/upvote/", views.upvote_view, name="upvote"),
+    path("api/suggest-description/", views.suggest_description_view, name="suggest_description"),
     path("analytics/", views.analytics_view, name="analytics"),
     path("register/", views.register_view, name="register"),
     path("login/", views.login_view, name="login"),

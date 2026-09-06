@@ -142,6 +142,21 @@ def map_view(request):
 
 
 @login_required
+def suggest_description_view(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required.")
+    try:
+        hint = json.loads(request.body).get("hint", "")
+    except (ValueError, AttributeError):
+        hint = ""
+    data = classify_issue(hint or "a civic issue in my neighbourhood")
+    text = (data.get("description") or data.get("summary") or "").strip()
+    if not text:
+        text = hint or "a civic issue in my neighbourhood"
+    return JsonResponse({"description": text})
+
+
+@login_required
 def upvote_view(request, pk):
     issue = get_object_or_404(Issue, pk=pk)
     if request.method == "POST":

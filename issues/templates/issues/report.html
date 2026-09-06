@@ -63,6 +63,12 @@
         {{ form.description.errors }}
         <label class="form-label fw-semibold" for="{{ form.description.id_for_label }}">Describe the problem</label>
         {{ form.description }}
+        <div class="d-flex align-items-center justify-content-between mt-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" id="ai-desc-btn">
+            ✨ Auto-write a good description
+          </button>
+          <span id="ai-desc-msg" class="small text-muted"></span>
+        </div>
       </div>
 
       <button class="btn btn-primary w-100 py-2" type="submit" id="submit-btn" disabled>Submit Report</button>
@@ -86,6 +92,37 @@
   var manualLoc = document.getElementById('manual-loc');
   var manualArea = document.getElementById('manual-area');
   var addressInput = document.getElementById('id_address');
+  var descInput = document.getElementById('id_description');
+  var aiBtn = document.getElementById('ai-desc-btn');
+  var aiMsg = document.getElementById('ai-desc-msg');
+
+  aiBtn.addEventListener('click', function(){
+    if (!descInput.value.trim()) {
+      aiMsg.textContent = 'Type a short hint first, e.g. "broken water pipe leaking on the street".';
+      descInput.focus();
+      return;
+    }
+    aiBtn.disabled = true;
+    aiMsg.textContent = 'AI is writing the description…';
+    fetch('{% url "suggest_description" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
+      },
+      body: JSON.stringify({hint: descInput.value.trim()})
+    }).then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.description) {
+          descInput.value = data.description;
+          aiMsg.textContent = 'Done — AI wrote the description above. Edit if needed.';
+        } else {
+          aiMsg.textContent = 'AI service unavailable — try again later.';
+        }
+      })
+      .catch(function(){ aiMsg.textContent = 'AI service unavailable — try again later.'; })
+      .finally(function(){ aiBtn.disabled = false; });
+  });
 
   function showManual(){
     manualLoc.classList.remove('d-none');
