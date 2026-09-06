@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+db.sqlite3
+staticfiles/
+media/
+.DS_Store
+db_e2e.sqlite3*
+media_e2e/
+tests_e2e/__pycache__/

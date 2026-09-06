@@ -1,0 +1,42 @@
+{% extends "issues/base.html" %}
+{% block title %}Issue Map · CivicSense{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Issue Map</h4>
+  <div class="map-legend">
+    <span><span class="dot" style="background:#b04231"></span>High priority</span>
+    <span class="ms-3"><span class="dot" style="background:#d88339"></span>Medium priority</span>
+    <span class="ms-3"><span class="dot" style="background:#50996d"></span>Resolved</span>
+  </div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  var issues = {{ issues_json|safe }};
+  var map = L.map('map').setView([28.6139, 77.2090], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  var colors = { 'High': '#b04231', 'Medium': '#d88339', 'Low': '#50996d' };
+  var bounds = [];
+  issues.forEach(function(issue){
+    var color = colors[issue.priority] || '#0d6efd';
+    var marker = L.circleMarker([issue.lat, issue.lng], {
+      radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.85
+    }).addTo(map);
+    marker.bindPopup(
+      '<strong>#' + issue.id + ' · ' + issue.category + '</strong><br>' +
+      '<span class="priority-' + issue.priority + '">' + issue.priority + '</span> · ' +
+      issue.status + '<br>' + issue.description.slice(0, 120) +
+      '<br><a href="/issue/' + issue.id + '/">View</a>'
+    );
+    bounds.push([issue.lat, issue.lng]);
+  });
+  if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds).pad(0.1));
+  else if (bounds.length === 1) map.setView(bounds[0], 14);
+})();
+</script>
+{% endblock %}

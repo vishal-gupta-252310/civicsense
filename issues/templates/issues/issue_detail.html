@@ -1,0 +1,107 @@
+{% extends "issues/base.html" %}
+{% block title %}Issue #{{ issue.pk }} · CivicSense{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-9">
+    <div class="card p-4 p-md-5 mb-4">
+      <h4 class="mb-1">Issue Submitted — AI Classification</h4>
+      <p class="text-muted">Issue #{{ issue.pk }} · reported {{ issue.created_at|date:"M d, Y H:i" }} by {{ issue.reporter.username }}</p>
+
+      <div class="row g-4 mt-1">
+        <div class="col-md-4">
+          <div class="fw-semibold text-muted small">Category</div>
+          <div class="badge-cat badge px-3 py-2 fs-6">{{ issue.category|default:"Other" }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="fw-semibold text-muted small">Priority</div>
+          <div class="priority-{{ issue.ai_priority }} fs-5">{{ issue.ai_priority }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="fw-semibold text-muted small">Status</div>
+          <span class="status-pill status-{{ issue.get_status_display }}">{{ issue.get_status_display }}</span>
+        </div>
+      </div>
+
+      <div class="row g-4 mt-1">
+        <div class="col-md-4">
+          {% if issue.photo %}
+          <img src="{{ issue.photo.url }}" class="img-fluid rounded" alt="Issue photo">
+          {% else %}
+          <div class="border rounded d-flex align-items-center justify-content-center" style="height:140px;background:#f2faf6">No photo</div>
+          {% endif %}
+        </div>
+        <div class="col-md-8">
+          <div class="fw-semibold text-muted small">AI summary</div>
+          <p class="mb-0">{{ issue.ai_summary|default:issue.description }}</p>
+          <p class="mt-3 mb-0 text-muted small">Reported description: {{ issue.description }}</p>
+        </div>
+      </div>
+
+      {% if issue.duplicate_of %}
+      <div class="alert alert-warning mt-4 mb-0 py-2">
+        This report looks like a duplicate of <a href="{% url 'issue_detail' issue.duplicate_of.pk %}">Issue #{{ issue.duplicate_of.pk }}</a> reported nearby.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="row g-4">
+      <div class="col-md-5">
+        <div class="card p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Community</h5>
+            <span class="badge rounded-pill" style="background:#e8f1ec;color:var(--primary-dark)" id="upvote-count">{{ upvote_count }}</span>
+          </div>
+          <form method="post" action="{% url 'upvote' issue.pk %}" id="upvote-form">
+            {% csrf_token %}
+            <button class="btn btn-outline-secondary w-100" type="submit" id="upvote-btn">
+              {% if has_upvoted %}Remove upvote{% else %}Upvote this issue{% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+      <div class="col-md-7">
+        <div class="card p-4">
+          <h5 class="mb-3">Progress</h5>
+          {% if is_staff %}
+          <form method="post" class="mb-3">
+            {% csrf_token %}
+            {{ form.new_status }}
+            <div class="mt-2">{{ form.note }}</div>
+            <button class="btn btn-primary w-100 mt-2" type="submit">Update status</button>
+          </form>
+          {% else %}
+          <p class="text-muted small">Only administrators can change the status of an issue.</p>
+          {% endif %}
+          <ul class="list-unstyled mb-0">
+            {% for update in issue.status_updates.all %}
+            <li class="border-bottom py-2">
+              <span class="status-pill status-{{ update.get_new_status_display|default:update.new_status }}">{{ update.get_new_status_display|default:update.new_status }}</span>
+              <small class="text-muted d-block mt-1">{{ update.timestamp|date:"M d, Y H:i" }} by {{ update.staff|default:"system" }}</small>
+              {% if update.note %}<small class="d-block text-muted">{{ update.note }}</small>{% endif %}
+            </li>
+            {% empty %}
+            <li class="text-muted">No updates yet.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var form = document.getElementById('upvote-form');
+  if (!form) return;
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        document.getElementById('upvote-count').textContent = d.count;
+        document.getElementById('upvote-btn').textContent = d.voted ? 'Remove upvote' : 'Upvote this issue';
+      });
+  });
+})();
+</script>
+{% endblock %}

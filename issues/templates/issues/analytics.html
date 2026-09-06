@@ -1,0 +1,57 @@
+{% extends "issues/base.html" %}
+{% block title %}Analytics · CivicSense{% endblock %}
+{% block content %}
+<h4 class="mb-4">Analytics Dashboard</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="kpi-card text-center">
+      <h2 class="mb-0">{{ total_issues }}</h2>
+      <span class="text-muted">Total Issues</span>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="kpi-card text-center">
+      <h2 class="mb-0">{{ open_count }}</h2>
+      <span class="text-muted">Open</span>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="kpi-card text-center">
+      <h2 class="mb-0">{{ resolved_count }}</h2>
+      <span class="text-muted">Resolved</span>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card p-4"><h6 class="mb-3">Issues by Category</h6><canvas id="categoryChart"></canvas></div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-4"><h6 class="mb-3">By Status</h6><canvas id="statusChart"></canvas></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function(){
+  var byCategory = {{ by_category|safe }};
+  var byStatus = {{ by_status|safe }};
+  var PALETTE = ['#326d5b', '#50996d', '#8ac1ac', '#579e7f', '#d88339', '#b04231', '#6c757d'];
+
+  function pie(el, data){
+    new Chart(document.getElementById(el), {
+      type: 'pie',
+      data: {
+        labels: Object.keys(data),
+        datasets: [{ data: Object.values(data), backgroundColor: PALETTE }]
+      },
+      options: { plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+  pie('categoryChart', byCategory);
+  pie('statusChart', byStatus);
+})();
+</script>
+{% endblock %}

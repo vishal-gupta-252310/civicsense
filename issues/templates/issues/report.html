@@ -1,0 +1,203 @@
+{% extends "issues/base.html" %}
+{% block title %}Report an Issue · CivicSense{% endblock %}
+{% block content %}
+<div class="report-wrap">
+  <div class="report-card">
+    <div class="report-head">
+      <div class="report-ico">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      </div>
+      <h4 class="mb-1">Report an Issue</h4>
+      <p class="text-muted mb-0">Tell us what's broken around you — we'll classify it automatically</p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" id="report-form">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+
+      <div class="field-group">
+        {{ form.photo.errors }}
+        <label class="form-label fw-semibold">Photo</label>
+        <label class="dropzone" for="{{ form.photo.id_for_label }}" id="photo-drop">
+          <span class="dz-empty" id="dz-empty">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span>Tap to add a photo</span>
+            <small>Drag &amp; drop or click — helps us verify the issue</small>
+          </span>
+          <span id="photo-preview" class="d-none"></span>
+        </label>
+        <input type="file" name="photo" id="{{ form.photo.id_for_label }}" class="d-none" accept="image/*">
+        <p class="form-text mt-1 mb-0">Optional — but a picture makes it easier to act on.</p>
+      </div>
+
+      {{ form.latitude }}
+      {{ form.longitude }}
+
+      <div id="loc-status" class="loc-status waiting mb-3">
+        <span class="loc-dot"></span>
+        <span id="loc-text">Detecting your location…</span>
+        <span id="loc-coords" class="text-muted"></span>
+      </div>
+
+      <div id="manual-loc" class="manual-loc d-none mb-3">
+        <p class="small fw-semibold mb-2" style="color:var(--primary-dark)">Automatic location failed — enter it manually</p>
+        <div class="field-group mb-2">
+          {{ form.address.errors }}
+          <label class="form-label" for="{{ form.address.id_for_label }}">Address / area details</label>
+          {{ form.address }}
+        </div>
+        <div class="field-group mb-0">
+          <label class="form-label" for="manual-area">Select an area for the map</label>
+          <select id="manual-area" class="form-select">
+            <option value="" selected disabled>Choose an area…</option>
+            <option value="28.6139,77.2090">New Delhi</option>
+            <option value="19.0760,72.8777">Mumbai</option>
+            <option value="12.9716,77.5946">Bengaluru</option>
+            <option value="13.0827,80.2707">Chennai</option>
+            <option value="22.5726,88.3639">Kolkata</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        {{ form.description.errors }}
+        <label class="form-label fw-semibold" for="{{ form.description.id_for_label }}">Describe the problem</label>
+        {{ form.description }}
+      </div>
+
+      <button class="btn btn-primary w-100 py-2" type="submit" id="submit-btn" disabled>Submit Report</button>
+      <p class="text-center text-muted small mt-2 mb-0">Category &amp; priority will be set automatically by AI</p>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var status = document.getElementById('loc-status');
+  var lat = document.getElementById('id_latitude');
+  var lng = document.getElementById('id_longitude');
+  var submit = document.getElementById('submit-btn');
+  var coords = document.getElementById('loc-coords');
+  var locText = document.getElementById('loc-text');
+  var dropzone = document.getElementById('photo-drop');
+  var fileInput = document.querySelector('#report-form input[type=file]');
+  var empty = document.getElementById('dz-empty');
+  var preview = document.getElementById('photo-preview');
+  var manualLoc = document.getElementById('manual-loc');
+  var manualArea = document.getElementById('manual-area');
+  var addressInput = document.getElementById('id_address');
+
+  function showManual(){
+    manualLoc.classList.remove('d-none');
+    addressInput.focus();
+  }
+
+  manualArea.addEventListener('change', function(){
+    if (manualArea.value) {
+      var parts = manualArea.value.split(',');
+      lat.value = parts[0];
+      lng.value = parts[1];
+      ready('ok', 'Location set from area selection', parts[0] + ', ' + parts[1]);
+      submit.disabled = false;
+    }
+  });
+
+  fileInput.addEventListener('change', function(){
+    var f = fileInput.files[0];
+    if (f && f.type.indexOf('image/') === 0) {
+      preview.innerHTML = '<img src="' + URL.createObjectURL(f) + '" alt="Photo preview">';
+      preview.classList.remove('d-none');
+      empty.classList.add('d-none');
+      dropzone.classList.remove('dragover');
+    }
+  });
+
+  ['dragenter', 'dragover'].forEach(function(name){
+    dropzone.addEventListener(name, function(e){ e.preventDefault(); dropzone.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(function(name){
+    dropzone.addEventListener(name, function(e){ e.preventDefault(); dropzone.classList.remove('dragover'); });
+  });
+  dropzone.addEventListener('drop', function(e){
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+
+  function ready(cls, text, extra){
+    status.classList.remove('waiting');
+    status.className = 'loc-status ' + cls + ' mb-3';
+    locText.innerHTML = text;
+    coords.textContent = extra || '';
+  }
+
+  function locateByIP(){
+    fetch('https://ipwho.is/', { signal: AbortSignal.timeout(8000) })
+      .then(function(r){
+        if (!r.ok) throw new Error('ipwho http ' + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        if (!data.success || !data.latitude || !data.longitude) throw new Error('ipwho returned no coords');
+        manualLoc.classList.add('d-none');
+        lat.value = data.latitude;
+        lng.value = data.longitude;
+        coords.textContent = parseFloat(data.latitude).toFixed(4) + ', ' + parseFloat(data.longitude).toFixed(4);
+        if (data.city && !addressInput.value) {
+          addressInput.value = data.city + (data.region ? ', ' + data.region : '');
+        }
+        ready('ok', 'Location detected via network (approximate)', coords.textContent);
+        submit.disabled = false;
+      })
+      .catch(function(){
+        ready('err', 'Could not detect your location automatically.');
+        showManual();
+      });
+  }
+
+  if (!navigator.geolocation) {
+    ready('err', 'Geolocation is not supported by this browser — trying network location…');
+    locateByIP();
+    return;
+  }
+
+  var ERR_TIPS = {
+    1: 'Location permission is denied for this site.',
+    2: 'Could not get a browser location fix.',
+    3: 'Getting your location is taking too long.'
+  };
+
+  function requestLocation(){
+    status.classList.remove('err');
+    status.className = 'loc-status waiting mb-3';
+    locText.textContent = 'Detecting your location…';
+    coords.textContent = '';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      manualLoc.classList.add('d-none');
+      lat.value = pos.coords.latitude;
+      lng.value = pos.coords.longitude;
+      coords.textContent = pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4);
+      ready('ok', 'Location captured (auto-detected)', coords.textContent);
+      submit.disabled = false;
+    }, function(err){
+      var tip = ERR_TIPS[err.code] || 'Location is not available.';
+      if (err.code === 1) {
+        tip += ' Allow it in the address bar (location icon → Allow), then retry.';
+      } else {
+        tip += ' Trying an approximate network-based location…';
+      }
+      ready('err', tip + ' <a href="#" id="loc-retry" class="ms-1">Retry</a>');
+      var retry = document.getElementById('loc-retry');
+      if (retry) retry.addEventListener('click', function(e){
+        e.preventDefault();
+        requestLocation();
+      });
+      locateByIP();
+    }, { maximumAge: 0, timeout: 20000 });
+  }
+
+  requestLocation();
+})();
+</script>
+{% endblock %}

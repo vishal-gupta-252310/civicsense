@@ -1,0 +1,70 @@
+{% extends "issues/base.html" %}
+{% block title %}Reported Issues · CivicSense{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0 fw-bold" style="color:var(--primary-dark)">Reported Issues</h4>
+  <a href="{% url 'report' %}" class="btn btn-primary px-3">+ Report an issue</a>
+</div>
+
+<div class="home-stats d-flex gap-3 mb-4">
+  <div class="home-stat-card">
+    <h3 class="mb-0">{{ total_issues }}</h3>
+    <span>Total</span>
+  </div>
+  <div class="home-stat-card">
+    <h3 class="mb-0">{{ open_count }}</h3>
+    <span>Open</span>
+  </div>
+  <div class="home-stat-card">
+    <h3 class="mb-0">{{ resolved_count }}</h3>
+    <span>Resolved</span>
+  </div>
+</div>
+
+{% if issues %}
+  <div class="row g-3">
+    {% for issue in issues %}
+    <div class="col-md-6 col-lg-4">
+      <div class="issue-card card h-100">
+        <div class="issue-photo">
+          {% if issue.photo %}
+          <img src="{{ issue.photo.url }}" alt="Issue photo">
+          {% else %}
+          <div class="issue-photo-fallback">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </div>
+          {% endif %}
+        </div>
+        <div class="issue-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="badge-cat badge px-2 py-1">{{ issue.category|default:"Other" }}</span>
+            <span class="priority-{{ issue.ai_priority }} issue-priority">{{ issue.ai_priority }}</span>
+          </div>
+          <div class="issue-desc">{{ issue.description }}</div>
+          {% if issue.address %}
+          <p class="issue-address mb-1">📍 {{ issue.address }}</p>
+          {% endif %}
+          <div class="d-flex justify-content-between align-items-center mt-auto">
+            <span class="status-pill status-{{ issue.get_status_display }}">{{ issue.get_status_display }}</span>
+            <small class="text-muted">{{ issue.created_at|date:"M d, Y" }}</small>
+          </div>
+        </div>
+        <div class="card-foot">
+          <span class="issue-upvotes">▲ {{ issue.upvotes.count }}</span>
+          <a href="{% url 'issue_detail' issue.pk %}" class="btn btn-sm btn-primary">View details</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-ico mb-3">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 15h8"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/></svg>
+    </div>
+    <p class="mb-0 fw-semibold" style="color:var(--primary-dark)">No issues reported yet.</p>
+    <p class="text-muted mb-0">Be the first to report one in your neighbourhood.</p>
+    <a href="{% url 'report' %}" class="btn btn-primary px-4 mt-3">Report an issue</a>
+  </div>
+{% endif %}
+{% endblock %}
