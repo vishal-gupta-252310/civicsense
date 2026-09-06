@@ -36,6 +36,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -63,19 +64,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "civicsense.wsgi.application"
 
+# Database chosen by configuration: "mysql" (default, local/report) or "postgres" (deploy).
+DB_ENGINE = env("DB_ENGINE", default="mysql")
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
+        "ENGINE": (
+            "django.db.backends.postgresql"
+            if DB_ENGINE == "postgres"
+            else "django.db.backends.mysql"
+        ),
         "NAME": env("DB_NAME", default="civicsense"),
         "USER": env("DB_USER", default="civicsense"),
         "PASSWORD": env("DB_PASSWORD", default=""),
         "HOST": env("DB_HOST", default="127.0.0.1"),
         "PORT": env("DB_PORT", default="3306"),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
     }
 }
+if DB_ENGINE == "postgres":
+    DATABASES["default"]["OPTIONS"] = {"sslmode": env("DB_SSLMODE", default="require")}
+else:
+    DATABASES["default"]["OPTIONS"] = {"charset": "utf8mb4"}
 
 # AI micro-service and provider are chosen purely by configuration (Listing 3.4).
 AI_SERVICE_URL = env("AI_SERVICE_URL", default="http://localhost:8001")
@@ -108,6 +117,16 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Store uploaded photos on Cloudinary when credentials are configured; otherwise
+# keep the local filesystem (development). Selected purely by configuration.
+if env("CLOUDINARY_CLOUD_NAME", default="") and env("CLOUDINARY_API_KEY", default=""):
+    STORAGES = {"default": {"BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"}}
+    CLOUDINARY_STORAGE = {
+        "CLOUD_NAME": env("CLOUDINARY_CLOUD_NAME"),
+        "API_KEY": env("CLOUDINARY_API_KEY"),
+        "API_SECRET": env("CLOUDINARY_API_SECRET", default=""),
+    }
 
 # Login/logout redirects
 LOGIN_URL = "/login/"
