@@ -24,6 +24,23 @@
 
       <div class="row g-4 mt-1">
         <div class="col-md-4">
+          <div class="fw-semibold text-muted small">Location / Address</div>
+          <div>{{ issue.address|default:"—" }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="fw-semibold text-muted small">Coordinates</div>
+          <div>
+            {% if issue.latitude %}
+            {{ issue.latitude|floatformat:"-3" }}, {{ issue.longitude|floatformat:"-3" }}
+            {% else %}
+            —
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4 mt-1">
+        <div class="col-md-4">
           {% if issue.photo %}
           <img src="{{ issue.photo.url }}" class="img-fluid rounded" alt="Issue photo">
           {% else %}

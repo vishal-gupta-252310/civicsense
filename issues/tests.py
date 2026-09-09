@@ -5,8 +5,10 @@ and real classification through the local fallback classifier (no mocks).
 """
 
 from io import BytesIO
+import re
 
 from django.contrib.auth.models import User
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
@@ -244,3 +246,155 @@ class FallbackClassifierTests(TestCase):
 
     def test_no_categories_required_for_classify(self):
         self.assertEqual(Category.objects.count(), 0)
+
+
+@override_settings(AI_SERVICE_URL=DEFAULT_AI_URL)
+class LLMSettingsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("llmuser", "llm@test.com", "StrongPass123!")
+        UserProfile.objects.create(user=self.user, role="citizen")
+
+    def test_settings_page_requires_login(self):
+        resp = self.client.get("/settings/llm/")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_settings_page_renders(self):
+        self.client.force_login(self.user)
+        resp = self.client.get("/settings/llm/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "AI Settings")
+
+    def test_save_settings(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            "/settings/llm/",
+            {"platform": "groq", "api_key": "gsk_test", "model": "qwen1.5-1.8b-chat"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.llm_platform, "groq")
+        self.assertEqual(self.user.profile.llm_api_key, "gsk_test")
+        self.assertEqual(self.user.profile.llm_model, "groq/qwen1.5-1.8b-chat")
+
+    def test_unknown_platform_rejected(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            "/settings/llm/",
+            {"platform": "nope", "api_key": "x", "model": "y"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_models_api_rejects_unknown_platform(self):
+        self.client.force_login(self.user)
+        resp = self.client.get("/api/llm/models/?platform=nope&api_key=x")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_nav_shows_ai_badge(self):
+        self.user.profile.llm_platform = "groq"
+        self.user.profile.llm_model = "groq/qwen3.6-27b"
+        self.user.profile.save()
+        self.client.force_login(self.user)
+        resp = self.client.get("/")
+        self.assertContains(resp, "groq · groq/qwen3.6-27b")
+        self.assertContains(resp, '/settings/llm/')
+
+    def test_nav_hides_badge_when_unconfigured(self):
+        self.client.force_login(self.user)
+        resp = self.client.get("/")
+        self.assertNotContains(resp, "· groq")
+
+    def test_suggest_description_surfaces_fallback_as_error(self):
+        # AI_SERVICE_URL default in tests is unreachable -> Django local fallback,
+        # which must surface as an error instead of echoing the hint.
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            "/api/suggest-description/",
+            data='{"hint": "pothole on the road"}',
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 502)
+        self.assertIn("error", resp.json())
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"], EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class PasswordResetTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("resetuser", "reset@test.com", "OldPass123!")
+        UserProfile.objects.create(user=self.user, role="citizen")
+
+    def _reset_url(self):
+        mail.outbox.clear()
+        resp = self.client.post("/password-reset/", {"email": "reset@test.com"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/password-reset/done/")
+        self.assertEqual(len(mail.outbox), 1)
+        match = re.search(
+            r"/password-reset/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)/", mail.outbox[0].body
+        )
+        self.assertIsNotNone(match)
+        # The token GET validates and 302s to /<uidb64>/set-password/, where the
+        # form is actually posted (so the token never leaks as a Referer).
+        resp = self.client.get(match.group(0), follow=True)
+        self.assertEqual(resp.status_code, 200)
+        return resp.request["PATH_INFO"]
+
+    def test_reset_link_flow_changes_password(self):
+        url = self._reset_url()
+        resp = self.client.post(
+            url, {"new_password1": "NewPass456!", "new_password2": "NewPass456!"}
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/password-reset/complete/")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewPass456!"))
+
+    def test_login_with_new_password(self):
+        url = self._reset_url()
+        self.client.post(url, {"new_password1": "NewPass456!", "new_password2": "NewPass456!"})
+        self.assertTrue(self.client.login(username="resetuser", password="NewPass456!"))
+
+    @override_settings(
+        SITE_URL="https://civicsense.example.com",
+        ALLOWED_HOSTS=["testserver", "localhost", "localhost:8000"],
+    )
+    def test_reset_email_local_request_links_to_localhost(self):
+        mail.outbox.clear()
+        resp = self.client.post(
+            "/password-reset/", {"email": "reset@test.com"}, HTTP_HOST="localhost:8000"
+        )
+        self.assertEqual(resp.status_code, 302)
+        msg = mail.outbox[0]
+        self.assertIn("http://localhost:8000/password-reset/", msg.body)
+        self.assertNotIn("civicsense.example.com", msg.body)
+        html = next(content for content, mimetype in msg.alternatives if mimetype == "text/html")
+        self.assertIn("http://localhost:8000/password-reset/", html)
+        self.assertNotIn("civicsense.example.com", html)
+
+    @override_settings(SITE_URL="https://civicsense.example.com")
+    def test_reset_email_is_branded_and_uses_public_domain(self):
+        mail.outbox.clear()
+        self.client.post("/password-reset/", {"email": "reset@test.com"})
+        msg = mail.outbox[0]
+        self.assertEqual(msg.subject, "CivicSense — reset your password")
+        self.assertIn("The CivicSense team", msg.body)
+        self.assertIn("civicsense.example.com", msg.body)
+        self.assertNotIn("localhost", msg.body)
+        html = next(content for content, mimetype in msg.alternatives if mimetype == "text/html")
+        for token in (
+            "background:#28594c",
+            "background:#326d5b",
+            "background:#f6faf6",
+            "civicsense.example.com",
+            "Reset your password",
+"automated message from CivicSense",
+        ):
+            self.assertIn(token, html)
+        self.assertNotIn("localhost", html)
+
+    def test_unknown_email_still_shows_done_page(self):
+        mail.outbox.clear()
+        self.client.post("/password-reset/", {"email": "ghost@test.com"})
+        self.assertEqual(len(mail.outbox), 0)
+        resp = self.client.get("/password-reset/done/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Check your email")

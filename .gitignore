@@ -7,5 +7,7 @@ staticfiles/
 media/
 .DS_Store
 db_e2e.sqlite3*
+db_e2e_test.sqlite3*
 media_e2e/
+media_e2e_test/
 tests_e2e/__pycache__/

@@ -135,3 +135,49 @@ if env("CLOUDINARY_CLOUD_NAME", default="") and env("CLOUDINARY_API_KEY", defaul
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+
+# Email (used by password reset). Console backend prints reset links to the
+# server log in development; point it at a real SMTP via .env for production.
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="CivicSense <noreply@civicsense.local>")
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+
+# Public site URL. Used as the domain in password-reset emails so they never
+# reference the request Host (e.g. "localhost"). Change to the real deploy URL.
+SITE_URL = env("SITE_URL", default="https://civicsense-django.onrender.com")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.environ.get("LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        "civicsense": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}

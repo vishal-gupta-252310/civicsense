@@ -63,11 +63,14 @@
         {{ form.description.errors }}
         <label class="form-label fw-semibold" for="{{ form.description.id_for_label }}">Describe the problem</label>
         {{ form.description }}
-        <div class="d-flex align-items-center justify-content-between mt-2">
+        <div class="mt-2">
           <button type="button" class="btn btn-sm btn-outline-primary" id="ai-desc-btn">
             ✨ Auto-write a good description
           </button>
-          <span id="ai-desc-msg" class="small text-muted"></span>
+        </div>
+        <div id="ai-desc-msg" class="loc-status d-none mt-2" role="status">
+          <span class="loc-dot"></span>
+          <span id="ai-desc-text"></span>
         </div>
       </div>
 
@@ -95,15 +98,56 @@
   var descInput = document.getElementById('id_description');
   var aiBtn = document.getElementById('ai-desc-btn');
   var aiMsg = document.getElementById('ai-desc-msg');
+  var aiText = document.getElementById('ai-desc-text');
+
+  function aiBanner(state, text){
+    aiMsg.className = 'loc-status ' + state + ' mt-2';
+    aiText.textContent = text;
+  }
+
+  function reverseGeocode(lat, lng){
+    var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+      + '&addressdetails=1&lat=' + lat + '&lon=' + lng;
+    fetch(url, { signal: AbortSignal.timeout(10000) })
+      .then(function(r){ if (!r.ok) throw new Error('nominatim ' + r.status); return r.json(); })
+      .then(function(data){
+        var a = data.address || {};
+        function pick(){
+          for (var i = 0; i < arguments.length; i++) {
+            if (a[arguments[i]]) return a[arguments[i]];
+          }
+          return '';
+        }
+        var parts = [];
+        var house = a.house_number, road = a.road;
+        if (house && road) parts.push(house + ', ' + road);
+        else if (road) parts.push(road);
+        var suburb = pick('suburb', 'neighbourhood', 'city_district');
+        if (suburb) parts.push(suburb);
+        var city = pick('city', 'town', 'village', 'municipality', 'county');
+        if (city) parts.push(city);
+        var state = pick('state', 'state_district');
+        if (state) parts.push(state + (a.postcode ? ' ' + a.postcode : ''));
+        else if (a.postcode) parts.push(a.postcode);
+        if (a.country) parts.push(a.country);
+        var full = parts.join(', ').slice(0, 250);
+        if (full) {
+          addressInput.value = full;
+          var note = locText.textContent.split(' — ')[0];
+          locText.textContent = note + ' — ' + full;
+        }
+      })
+      .catch(function(){ /* keep the partial/empty address; not critical */ });
+  }
 
   aiBtn.addEventListener('click', function(){
     if (!descInput.value.trim()) {
-      aiMsg.textContent = 'Type a short hint first, e.g. "broken water pipe leaking on the street".';
+      aiBanner('', 'Type a short hint first, e.g. "broken water pipe leaking on the street".');
       descInput.focus();
       return;
     }
     aiBtn.disabled = true;
-    aiMsg.textContent = 'AI is writing the description…';
+    aiBanner('waiting', 'AI is writing the description…');
     fetch('{% url "suggest_description" %}', {
       method: 'POST',
       headers: {
@@ -111,16 +155,20 @@
         'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''
       },
       body: JSON.stringify({hint: descInput.value.trim()})
-    }).then(function(r){ return r.json(); })
-      .then(function(data){
-        if (data.description) {
-          descInput.value = data.description;
-          aiMsg.textContent = 'Done — AI wrote the description above. Edit if needed.';
+    }).then(function(r){
+      return r.json().then(function(data){ return {ok: r.ok, data: data}; });
+    })
+      .then(function(res){
+        if (res.data.description) {
+          descInput.value = res.data.description;
+          aiBanner('ok', 'AI wrote a good description above — edit it if needed.');
+        } else if (res.data.error) {
+          aiBanner('err', res.data.error);
         } else {
-          aiMsg.textContent = 'AI service unavailable — try again later.';
+          aiBanner('err', 'AI service unavailable — try again later.');
         }
       })
-      .catch(function(){ aiMsg.textContent = 'AI service unavailable — try again later.'; })
+      .catch(function(){ aiBanner('err', 'AI service unavailable — try again later.'); })
       .finally(function(){ aiBtn.disabled = false; });
   });
 
@@ -136,6 +184,7 @@
       lng.value = parts[1];
       ready('ok', 'Location set from area selection', parts[0] + ', ' + parts[1]);
       submit.disabled = false;
+      reverseGeocode(parts[0], parts[1]);
     }
   });
 
@@ -186,6 +235,7 @@
         }
         ready('ok', 'Location detected via network (approximate)', coords.textContent);
         submit.disabled = false;
+        reverseGeocode(data.latitude, data.longitude);
       })
       .catch(function(){
         ready('err', 'Could not detect your location automatically.');
@@ -217,6 +267,7 @@
       coords.textContent = pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4);
       ready('ok', 'Location captured (auto-detected)', coords.textContent);
       submit.disabled = false;
+      reverseGeocode(pos.coords.latitude, pos.coords.longitude);
     }, function(err){
       var tip = ERR_TIPS[err.code] || 'Location is not available.';
       if (err.code === 1) {

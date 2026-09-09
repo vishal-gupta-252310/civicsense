@@ -1,9 +1,15 @@
 """Django forms for registration and issue reporting."""
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import authenticate
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import (
+    PasswordResetForm,
+    SetPasswordForm,
+    UserCreationForm,
+)
 from django.contrib.auth.models import User
+from urllib.parse import urlsplit
 
 from .models import Issue
 
@@ -49,6 +55,58 @@ class EmailLoginForm(forms.Form):
             raise forms.ValidationError("Incorrect password.")
         cleaned["user"] = auth_user
         return cleaned
+
+
+class CivicPasswordResetForm(PasswordResetForm):
+    email = forms.EmailField(
+        widget=forms.EmailInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "you@example.com",
+                "required": True,
+            }
+        )
+    )
+
+    def save(self, **kwargs):
+        request = kwargs.get("request")
+        site_url = urlsplit(settings.SITE_URL)
+        host = request.get_host() if request else ""
+        hostname = urlsplit("//" + host).hostname.lower() if host else ""
+        if hostname in ("localhost", "127.0.0.1", "::1"):
+            # Local dev: the reset link points back at the local server.
+            kwargs["domain_override"] = host
+            kwargs["use_https"] = False
+        else:
+            # Production: always use the public SITE_URL, never an internal host.
+            kwargs["domain_override"] = site_url.netloc
+            kwargs["use_https"] = site_url.scheme == "https"
+        return super().save(**kwargs)
+
+
+class CivicSetPasswordForm(SetPasswordForm):
+    new_password1 = forms.CharField(
+        label="New password",
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "New password",
+                "required": True,
+                "autocomplete": "new-password",
+            }
+        ),
+    )
+    new_password2 = forms.CharField(
+        label="Confirm password",
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Confirm password",
+                "required": True,
+                "autocomplete": "new-password",
+            }
+        ),
+    )
 
 
 class RegisterForm(UserCreationForm):

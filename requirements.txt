@@ -6,7 +6,7 @@ requests
 pillow
 mysqlclient
 pymysql
-litellm
+python-dotenv
 psycopg2-binary
 gunicorn
 whitenoise

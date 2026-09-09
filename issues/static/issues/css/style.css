@@ -8,6 +8,9 @@
   --resolved: #50996d;
   --bg: #f6faf6;
   --card: #ffffff;
+  --bs-primary: #326d5b;
+  --bs-primary-rgb: 50, 109, 91;
+  --bs-focus-ring-color: rgba(50, 109, 91, .25);
 }
 
 body {
@@ -33,20 +36,45 @@ body {
   background: var(--primary);
   border-color: var(--primary);
   border-radius: .5rem;
+  transition: transform .15s ease, box-shadow .15s ease;
 }
-.btn-primary:hover, .btn-secondary:hover {
+.btn-outline-secondary, .btn-outline-primary {
+  color: var(--primary);
+  border-color: var(--primary);
+  box-shadow: none !important;
+  border-radius: .5rem;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn-primary:focus, .btn-secondary:focus,
+.btn-outline-primary:focus, .btn-outline-secondary:focus {
+  box-shadow: none !important;
+}
+.btn-primary:disabled, .btn-primary.disabled,
+.btn-secondary:disabled, .btn-secondary.disabled {
+  background: #9ab8ac;
+  border-color: #9ab8ac;
+}
+.btn:active:not(:disabled), .btn-check:checked + .btn {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled), .btn-secondary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(50, 109, 91, .25);
+}
+.btn-primary:active:not(:disabled), .btn-secondary:active:not(:disabled) {
   background: var(--primary-dark);
   border-color: var(--primary-dark);
 }
-.btn-outline-secondary {
-  color: var(--primary);
-  border-color: var(--primary);
-  border-radius: .5rem;
-}
-.btn-outline-secondary:hover {
+.btn-outline-secondary:hover:not(:disabled), .btn-outline-primary:hover:not(:disabled) {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(50, 109, 91, .25);
 }
 
 a { color: var(--primary); }
@@ -179,8 +207,30 @@ a { color: var(--primary); }
   height: 18px;
   display: block;
 }
-.input-wrap .form-control { padding-left: 2.6rem; }
+.input-wrap .form-control { padding-left: 2.6rem; padding-right: 2.6rem; }
 .input-wrap .form-select { padding-left: 2.6rem; }
+.input-wrap .password-toggle {
+  position: absolute;
+  right: .35rem;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #6b7a73;
+  border-radius: .5rem;
+  cursor: pointer;
+  line-height: 0;
+  padding: 0;
+  z-index: 2;
+}
+.input-wrap .password-toggle:hover { color: var(--primary); }
+.input-wrap .password-toggle svg { width: 18px; height: 18px; display: block; }
 
 .form-control, .form-select {
   border: 1.5px solid #d7e3dc;

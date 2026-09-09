@@ -11,13 +11,17 @@ import requests
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DJANGO_PORT = 9100
 FASTAPI_PORT = 8100
-DB_FILE = os.path.join(BASE_DIR, "db_e2e.sqlite3")
-MEDIA_DIR = os.path.join(BASE_DIR, "media_e2e")
+DB_FILE = os.path.join(BASE_DIR, "db_e2e_test.sqlite3")
+MEDIA_DIR = os.path.join(BASE_DIR, "media_e2e_test")
 
 ENV = {
     **os.environ,
     "DJANGO_SETTINGS_MODULE": "civicsense.e2e_settings",
     "AI_SERVICE_URL": f"http://127.0.0.1:{FASTAPI_PORT}",
+    # Scratch DB/media, separate from the local dev server's data — running
+    # the E2E suite must never wipe your dev account/password.
+    "CIVICSENSE_E2E_DB": "db_e2e_test.sqlite3",
+    "CIVICSENSE_E2E_MEDIA": "media_e2e_test",
 }
 
 

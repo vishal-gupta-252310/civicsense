@@ -40,7 +40,7 @@
           </span>
           {{ form.password }}
         </div>
-        <a href="#" class="small text-muted" onclick="return false;">Forgot password?</a>
+        <a href="{% url 'password_reset' %}" class="small text-muted">Forgot password?</a>
       </div>
 
       <button class="btn btn-primary w-100 py-2 mt-2" type="submit">Sign in</button>

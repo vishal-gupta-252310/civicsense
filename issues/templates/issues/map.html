@@ -27,12 +27,16 @@
     var marker = L.circleMarker([issue.lat, issue.lng], {
       radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.85
     }).addTo(map);
-    marker.bindPopup(
+    var popup =
       '<strong>#' + issue.id + ' · ' + issue.category + '</strong><br>' +
       '<span class="priority-' + issue.priority + '">' + issue.priority + '</span> · ' +
-      issue.status + '<br>' + issue.description.slice(0, 120) +
-      '<br><a href="/issue/' + issue.id + '/">View</a>'
-    );
+      issue.status;
+    if (issue.address) {
+      popup += '<br>📍 ' + issue.address;
+    }
+    popup += '<br>' + issue.description.slice(0, 120) +
+      '<br><a href="/issue/' + issue.id + '/">View</a>';
+    marker.bindPopup(popup);
     bounds.push([issue.lat, issue.lng]);
   });
   if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds).pad(0.1));

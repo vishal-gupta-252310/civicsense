@@ -14,23 +14,47 @@ from fallback import classify as fallback_classify
 DEFAULT_DUPLICATE_RADIUS_M = 100.0
 
 
-def classify_issue(description):
-    """Return {category, priority, summary}.
+def classify_issue(description, *, platform=None, api_key=None, model=None, photo=None):
+    """Return {category, priority, summary, description}.
 
-    Attempts the FastAPI /classify endpoint; if unavailable, falls back to
-    the local rule-based classifier so reporting never simply fails.
+    Attempts the FastAPI /classify endpoint with optional per-user LLM config
+    and an optional photo (readable file object); if unavailable, falls back
+    to the local rule-based classifier so reporting never simply fails.
     """
+    payload = {"description": description}
+    if photo is not None:
+        try:
+            raw = photo.read()
+            photo.seek(0)
+        except Exception:
+            raw = None
+        if raw:
+            import base64
+            mime = getattr(photo, "content_type", None) or "image/jpeg"
+            payload["photo"] = "data:%s;base64,%s" % (
+                mime,
+                base64.b64encode(raw).decode("ascii"),
+            )
+    if platform:
+        payload["platform"] = platform
+    if api_key:
+        payload["api_key"] = api_key
+    if model:
+        payload["model"] = model
     try:
         r = requests.post(
             settings.AI_SERVICE_URL + "/classify",
-            json={"description": description},
-            timeout=8,
+            json=payload,
+            timeout=15,
         )
         r.raise_for_status()
         return r.json()
     except Exception:
-        # Text fallback keeps reporting working even if the AI service is down
-        return fallback_classify(description)
+        # Text fallback keeps reporting working even if the AI service is down.
+        result = fallback_classify(description)
+        result["description"] = description
+        result["source"] = "fallback"
+        return result
 
 
 def find_duplicate(description, latitude, longitude, radius_m=DEFAULT_DUPLICATE_RADIUS_M):

@@ -2,6 +2,8 @@
 
 import json
 
+import requests
+
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseBadRequest, JsonResponse
@@ -9,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .forms import EmailLoginForm, RegisterForm, ReportIssueForm, StatusUpdateForm
+from .llm import PLATFORMS, full_model_id, fetch_models
 from .models import Category, Issue, StatusUpdate, Upvote, UserProfile
 from .services import classify_issue, find_duplicate
 
@@ -70,7 +73,14 @@ def report_view(request):
         if form.is_valid():
             issue = form.save(commit=False)
             issue.reporter = request.user
-            ai = classify_issue(issue.description)
+            profile = getattr(request.user, "profile", None)
+            ai = classify_issue(
+                issue.description,
+                platform=profile.llm_platform if profile else "",
+                api_key=profile.llm_api_key if profile else "",
+                model=profile.llm_model if profile else "",
+                photo=issue.photo,
+            )
             category, _ = Category.objects.get_or_create(name=ai["category"])
             issue.category = category
             issue.ai_priority = ai["priority"]
@@ -130,6 +140,7 @@ def map_view(request):
         {
             "id": i.pk,
             "description": i.description,
+            "address": i.address,
             "category": i.category.name if i.category else "Other",
             "priority": i.ai_priority,
             "status": i.status,
@@ -149,11 +160,81 @@ def suggest_description_view(request):
         hint = json.loads(request.body).get("hint", "")
     except (ValueError, AttributeError):
         hint = ""
-    data = classify_issue(hint or "a civic issue in my neighbourhood")
+    profile = getattr(request.user, "profile", None)
+    data = classify_issue(
+        hint or "a civic issue in my neighbourhood",
+        platform=profile.llm_platform if profile else "",
+        api_key=profile.llm_api_key if profile else "",
+        model=profile.llm_model if profile else "",
+    )
+    if data.get("source") == "fallback":
+        return JsonResponse(
+            {
+                "error": (
+                    "The AI service fell back to a plain echo — no model responded. "
+                    "Check your API key/model on the AI Settings page, or try again later."
+                )
+            },
+            status=502,
+        )
     text = (data.get("description") or data.get("summary") or "").strip()
     if not text:
         text = hint or "a civic issue in my neighbourhood"
     return JsonResponse({"description": text})
+
+
+@login_required
+def llm_settings_view(request):
+    profile = request.user.profile
+    if request.method == "POST":
+        platform = (request.POST.get("platform") or "").strip()
+        api_key = (request.POST.get("api_key") or "").strip()
+        model_id = (request.POST.get("model") or "").strip()
+        if platform and platform not in PLATFORMS:
+            return render(
+                request,
+                "issues/llm_settings.html",
+                {
+                    "error": "Unknown platform.",
+                    "platforms": PLATFORMS,
+                },
+                status=400,
+            )
+        profile.llm_platform = platform
+        profile.llm_api_key = api_key
+        profile.llm_model = full_model_id(platform, model_id) if platform and model_id else ""
+        profile.save(update_fields=["llm_platform", "llm_api_key", "llm_model"])
+        return redirect("llm_settings")
+    return render(
+        request,
+        "issues/llm_settings.html",
+        {
+            "platforms": PLATFORMS,
+            "saved_platform": profile.llm_platform,
+            "saved_model": profile.llm_model,
+            "saved_key": profile.llm_api_key,
+        },
+    )
+
+
+@login_required
+def llm_models_api(request):
+    platform = (request.GET.get("platform") or "").strip()
+    api_key = (request.GET.get("api_key") or "").strip()
+    if not api_key:
+        api_key = request.user.profile.llm_api_key
+    try:
+        ids = fetch_models(platform, api_key)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except requests.RequestException:
+        return JsonResponse({"error": "Could not fetch models for this platform."}, status=502)
+    return JsonResponse(
+        {
+            "platform": platform,
+            "models": [{"id": mid, "model": full_model_id(platform, mid)} for mid in ids],
+        }
+    )
 
 
 @login_required

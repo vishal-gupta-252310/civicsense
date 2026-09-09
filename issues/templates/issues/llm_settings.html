@@ -1,0 +1,130 @@
+{% extends "issues/base.html" %}
+{% block title %}AI Settings · CivicSense{% endblock %}
+{% block content %}
+<div class="report-wrap">
+  <div class="report-card">
+    <div class="report-head">
+      <div class="report-ico">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1H7a2 2 0 0 0-2 2v1h2v-1h3V5a1 1 0 0 1 2 0v3H7a2 2 0 0 0-2 2v1h2v-1h4v2H7a2 2 0 0 0-2 2v2h5a2 2 0 0 1 2-2V9h5v1h2V9a2 2 0 0 0-2-2h-2V5a3 3 0 0 0-3-3Z"/><circle cx="12" cy="19" r="2"/></svg>
+      </div>
+      <h4 class="mb-1">AI Settings</h4>
+      <p class="text-muted mb-0">Bring your own API key and pick any model — used only for reports <em>you</em> submit</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger py-2 small" role="alert">{{ error }}</div>
+    {% endif %}
+
+    {% if saved_platform %}
+    <div class="alert alert-success py-2 small" role="alert">
+      Currently using <strong>{% for k, v in platforms.items %}{% if k == saved_platform %}{{ v.label }}{% endif %}{% endfor %}</strong> ·
+      <span class="font-monospace">{{ saved_model }}</span>
+    </div>
+    {% else %}
+    <div class="alert alert-secondary py-2 small" role="alert">
+      No key configured — reports use the built-in rule-based classifier.
+    </div>
+    {% endif %}
+
+    <form method="post" id="llm-form">
+      {% csrf_token %}
+
+      <div class="field-group">
+        <label class="form-label fw-semibold" for="id_platform">Platform</label>
+        <select name="platform" id="platform" class="form-select" required>
+          <option value="" selected disabled>Choose a platform…</option>
+          {% for key, p in platforms.items %}
+          <option value="{{ key }}" {% if key == saved_platform %}selected{% endif %}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label class="form-label fw-semibold" for="id_api_key">API key</label>
+        <input type="password" name="api_key" id="api-key" class="form-control"
+               placeholder="Paste your key" autocomplete="off"
+               value="{{ saved_key }}">
+        <p class="form-text mt-1 mb-0">Stored on your account and sent only to the AI service for your own classifications.</p>
+      </div>
+
+      <div class="field-group">
+        <label class="form-label fw-semibold">Available models</label>
+        <div class="d-flex gap-2 mb-2">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="load-models-btn">
+            ⟳ Fetch models for this platform
+          </button>
+        </div>
+        <select name="model" id="model" class="form-select" required disabled>
+          <option value="">Select a model…</option>
+        </select>
+        <p class="form-text mt-1 mb-0" id="model-status"></p>
+      </div>
+
+      <button class="btn btn-primary w-100 py-2" type="submit" id="save-btn">Save settings</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var platformEl = document.getElementById('platform');
+  var keyEl = document.getElementById('api-key');
+  var modelEl = document.getElementById('model');
+  var loadBtn = document.getElementById('load-models-btn');
+  var statusEl = document.getElementById('model-status');
+  var savedModel = "{{ saved_model }}";
+
+  platformEl.addEventListener('change', function(){
+    modelEl.innerHTML = '<option value="">Select a model…</option>';
+    modelEl.disabled = true;
+    statusEl.textContent = '';
+  });
+
+  loadBtn.addEventListener('click', function(){
+    var platform = platformEl.value;
+    if (!platform) {
+      statusEl.textContent = 'Choose a platform first.';
+      return;
+    }
+    var apiKey = keyEl.value.trim();
+    loadBtn.disabled = true;
+    statusEl.textContent = 'Fetching the live model list…';
+    fetch('{% url "llm_models" %}?platform=' + encodeURIComponent(platform) + '&api_key=' + encodeURIComponent(apiKey))
+      .then(function(r){ return r.json().then(function(d){ return {ok: r.ok, d: d}; }); })
+      .then(function(res){
+        if (!res.ok) throw new Error(res.d.error || 'fetch failed');
+        var models = res.d.models || [];
+        modelEl.innerHTML = '<option value="">Select a model…</option>';
+        models.forEach(function(m){
+          var opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.model;
+          modelEl.appendChild(opt);
+        });
+        if (savedModel) {
+          var match = [].slice.call(modelEl.options).find(function(o){
+            return o.textContent === savedModel;
+          });
+          if (match) modelEl.value = match.value;
+        }
+        modelEl.disabled = models.length === 0;
+        statusEl.textContent = models.length
+          ? models.length + ' models found for ' + platform
+          : 'No generation models available for this platform.';
+      })
+      .catch(function(e){
+        statusEl.textContent = 'Could not load models: ' + (e.message || 'network error');
+      })
+      .finally(function(){ loadBtn.disabled = false; });
+  });
+
+  var form = document.getElementById('llm-form');
+  form.addEventListener('submit', function(){
+    var btn = document.getElementById('save-btn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+  });
+})();
+</script>
+{% endblock %}

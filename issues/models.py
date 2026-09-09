@@ -16,6 +16,9 @@ class UserProfile(models.Model):
         related_name="profile",
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="citizen")
+    llm_platform = models.CharField(max_length=30, blank=True, default="")
+    llm_api_key = models.CharField(max_length=500, blank=True, default="")
+    llm_model = models.CharField(max_length=200, blank=True, default="")
 
     def __str__(self):
         return f"{self.user} ({self.get_role_display()})"
