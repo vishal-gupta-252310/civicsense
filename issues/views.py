@@ -45,7 +45,12 @@ def login_view(request):
             return redirect("home")
     else:
         form = EmailLoginForm()
-    return render(request, "issues/login.html", {"form": form})
+    response = render(request, "issues/login.html", {"form": form})
+    # Expose the rate-limit as a real status code so the lockout is observable
+    # (e.g. by clients/auditors) instead of looking like a normal failed login.
+    if getattr(form, "lockout", False):
+        response.status_code = 429
+    return response
 
 
 def logout_view(request):

@@ -137,12 +137,12 @@ class CivicSenseTests(TestCase):
         blocked = self.client.post(
             "/login/", {"email": "cit@test.com", "password": "wrong"}
         )
-        self.assertEqual(blocked.status_code, 200)
+        self.assertEqual(blocked.status_code, 429)
         self.assertContains(blocked, "Too many failed sign-in attempts")
         correct_during_lockout = self.client.post(
             "/login/", {"email": "cit@test.com", "password": "StrongPass123!"}
         )
-        self.assertEqual(correct_during_lockout.status_code, 200)
+        self.assertEqual(correct_during_lockout.status_code, 429)
         self.assertContains(correct_during_lockout, "Too many failed sign-in attempts")
 
     def test_login_next_param_no_open_redirect(self):

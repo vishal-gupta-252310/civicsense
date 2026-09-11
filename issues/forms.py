@@ -49,6 +49,10 @@ class EmailLoginForm(forms.Form):
     def __init__(self, *args, request=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = request
+        # True when this submission is refused due to rate-limiting (the view
+        # turns it into an HTTP 429 so the lockout is observable, not just an
+        # error message on an otherwise-200 response).
+        self.lockout = False
 
     def _client_ip(self):
         meta = self.request.META if self.request else {}
@@ -109,6 +113,7 @@ class EmailLoginForm(forms.Form):
         ip = self._client_ip()
         minutes = self._lockout_minutes(ip, email)
         if minutes:
+            self.lockout = True
             raise forms.ValidationError(
                 "Too many failed sign-in attempts. "
                 f"Try again in {minutes} minute{'s' if minutes != 1 else ''}."
