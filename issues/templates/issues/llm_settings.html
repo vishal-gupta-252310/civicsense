@@ -89,7 +89,12 @@
     var apiKey = keyEl.value.trim();
     loadBtn.disabled = true;
     statusEl.textContent = 'Fetching the live model list…';
-    fetch('{% url "llm_models" %}?platform=' + encodeURIComponent(platform) + '&api_key=' + encodeURIComponent(apiKey))
+    var body = new URLSearchParams({platform: platform, api_key: apiKey});
+    fetch('{% url "llm_models" %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''},
+      body: body
+    })
       .then(function(r){ return r.json().then(function(d){ return {ok: r.ok, d: d}; }); })
       .then(function(res){
         if (!res.ok) throw new Error(res.d.error || 'fetch failed');

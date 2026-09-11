@@ -250,8 +250,12 @@ def llm_settings_view(request):
 
 @login_required
 def llm_models_api(request):
-    platform = (request.GET.get("platform") or "").strip()
-    api_key = (request.GET.get("api_key") or "").strip()
+    if request.method == "POST":
+        platform = (request.POST.get("platform") or "").strip()
+        api_key = (request.POST.get("api_key") or "").strip()
+    else:
+        platform = (request.GET.get("platform") or "").strip()
+        api_key = (request.GET.get("api_key") or "").strip()
     if not api_key:
         api_key = request.user.profile.llm_api_key
     try:

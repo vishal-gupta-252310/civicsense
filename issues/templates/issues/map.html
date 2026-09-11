@@ -16,11 +16,10 @@
 (function(){
   var issues = {{ issues_json|safe }};
   var map = L.map('map').setView([28.6139, 77.2090], 12);
-  // CARTO Voyager (free, policy-compliant), not raw OSM tiles — OSM blocks
-  // third-party apps for policy violations.
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
+  // Esri WorldStreetMap — free, no API key required, policy-compliant.
+  // OSM tiles blocked this app; CARTO now requires a key for new users.
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, IGN, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
     maxZoom: 19
   }).addTo(map);
 

@@ -11,7 +11,7 @@ _CSP = "; ".join(
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
-        "img-src 'self' data: blob: https://res.cloudinary.com https://unpkg.com https://*.basemaps.cartocdn.com",
+        "img-src 'self' data: blob: https://res.cloudinary.com https://unpkg.com https://server.arcgisonline.com",
         "font-src 'self' data: https://cdn.jsdelivr.net",
         "connect-src 'self' https://nominatim.openstreetmap.org https://ipwho.is",
         "base-uri 'self'",
