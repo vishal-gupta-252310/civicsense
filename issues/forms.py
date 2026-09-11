@@ -1,5 +1,8 @@
 """Django forms for registration and issue reporting."""
 
+import json
+import time
+
 from django import forms
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -9,14 +12,14 @@ from django.contrib.auth.forms import (
     UserCreationForm,
 )
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from urllib.parse import urlsplit
 
 from .models import Issue
 
-ROLE_CHOICES = [
-    ("citizen", "Citizen"),
-    ("admin", "Administrator"),
-]
+LOGIN_FAILURE_LIMIT = 5
+LOGIN_IP_FAILURE_LIMIT = 20
+LOGIN_FAILURE_WINDOW = 900  # seconds
 
 
 class EmailLoginForm(forms.Form):
@@ -26,6 +29,7 @@ class EmailLoginForm(forms.Form):
                 "class": "form-control",
                 "placeholder": "you@example.com",
                 "required": True,
+                "autocomplete": "email",
             }
         )
     )
@@ -37,22 +41,91 @@ class EmailLoginForm(forms.Form):
                 "placeholder": "••••••••",
                 "required": True,
                 "minlength": 1,
+                "autocomplete": "current-password",
             }
         )
     )
+
+    def __init__(self, *args, request=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = request
+
+    def _client_ip(self):
+        meta = self.request.META if self.request else {}
+        return meta.get("REMOTE_ADDR", "") or ""
+
+    @staticmethod
+    def _read(key):
+        raw = cache.get(key)
+        if raw:
+            try:
+                return json.loads(raw)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    @staticmethod
+    def _write(key, count, start):
+        cache.set(key, json.dumps({"count": count, "start": start}),
+                  timeout=LOGIN_FAILURE_WINDOW)
+
+    def _record_failure(self, ip, email):
+        now = time.time()
+        for key in (
+            f"civicsense:login:{ip}",
+            f"civicsense:login:{ip}:{email}",
+        ):
+            rec = self._read(key)
+            self._write(key, (rec or {}).get("count", 0) + 1, (rec or {}).get("start", now))
+
+    def _clear_failures(self, ip, email):
+        cache.delete(f"civicsense:login:{ip}")
+        cache.delete(f"civicsense:login:{ip}:{email}")
+
+    def _lockout_minutes(self, ip, email):
+        now = time.time()
+        for key, limit in (
+            (f"civicsense:login:{ip}:{email}", LOGIN_FAILURE_LIMIT),
+            # Bare-IP limit sits higher: in production REMOTE_ADDR is the
+            # reverse-proxy IP shared by all users, so a low global threshold
+            # would let one attacker lock out the whole site.
+            (f"civicsense:login:{ip}", LOGIN_IP_FAILURE_LIMIT),
+        ):
+            rec = self._read(key)
+            if rec and rec.get("count", 0) >= limit:
+                elapsed = now - rec.get("start", now)
+                if elapsed < LOGIN_FAILURE_WINDOW:
+                    return max(1, int((LOGIN_FAILURE_WINDOW - elapsed) // 60) + 1)
+        return 0
 
     def clean(self):
         cleaned = super().clean()
         email = cleaned.get("email", "").strip().lower()
         password = cleaned.get("password")
+        if not email or not password:
+            # Field-level errors already render; don't count empty/spam submits
+            # as failed authentication attempts.
+            return cleaned
+        ip = self._client_ip()
+        minutes = self._lockout_minutes(ip, email)
+        if minutes:
+            raise forms.ValidationError(
+                "Too many failed sign-in attempts. "
+                f"Try again in {minutes} minute{'s' if minutes != 1 else ''}."
+            )
         user = None
         try:
             user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            raise forms.ValidationError("No account found for that email address.")
+        except (User.DoesNotExist, User.MultipleObjectsReturned):
+            # Same generic message for both failure modes so the login page never
+            # reveals which email addresses are registered.
+            self._record_failure(ip, email)
+            raise forms.ValidationError("Please enter a correct email and password.")
         auth_user = authenticate(username=user.username, password=password)
         if auth_user is None:
-            raise forms.ValidationError("Incorrect password.")
+            self._record_failure(ip, email)
+            raise forms.ValidationError("Please enter a correct email and password.")
+        self._clear_failures(ip, email)
         cleaned["user"] = auth_user
         return cleaned
 
@@ -64,6 +137,7 @@ class CivicPasswordResetForm(PasswordResetForm):
                 "class": "form-control",
                 "placeholder": "you@example.com",
                 "required": True,
+                "autocomplete": "email",
             }
         )
     )
@@ -116,13 +190,9 @@ class RegisterForm(UserCreationForm):
                 "class": "form-control",
                 "placeholder": "you@example.com",
                 "required": True,
+                "autocomplete": "email",
             }
         )
-    )
-    role = forms.ChoiceField(
-        choices=ROLE_CHOICES,
-        initial="citizen",
-        widget=forms.Select(attrs={"class": "form-select", "required": True}),
     )
     username = forms.CharField(
         max_length=150,
@@ -132,6 +202,7 @@ class RegisterForm(UserCreationForm):
                 "placeholder": "Choose a username",
                 "required": True,
                 "maxlength": 150,
+                "autocomplete": "username",
             }
         ),
     )
@@ -144,6 +215,7 @@ class RegisterForm(UserCreationForm):
                 "placeholder": "••••••••",
                 "required": True,
                 "minlength": 8,
+                "autocomplete": "new-password",
             }
         ),
     )
@@ -156,13 +228,14 @@ class RegisterForm(UserCreationForm):
                 "placeholder": "••••••••",
                 "required": True,
                 "minlength": 8,
+                "autocomplete": "new-password",
             }
         ),
     )
 
     class Meta:
         model = User
-        fields = ["username", "email", "role", "password1", "password2"]
+        fields = ["username", "email", "password1", "password2"]
 
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip()
@@ -170,15 +243,19 @@ class RegisterForm(UserCreationForm):
             raise forms.ValidationError("This username is already taken.")
         return username
 
+    def clean_email(self):
+        email = self.cleaned_data.get("email", "").strip().lower()
+        if User.objects.filter(email=email).exists():
+            raise forms.ValidationError("An account already exists for that email.")
+        return email
+
     def save(self, commit=True):
         user = super().save(commit=False)
+        user.is_staff = False
         if commit:
             user.save()
             from .models import UserProfile
-            UserProfile.objects.create(user=user, role=self.cleaned_data["role"])
-            if self.cleaned_data["role"] == "admin":
-                user.is_staff = True
-                user.save()
+            UserProfile.objects.create(user=user, role="citizen")
         return user
 
 

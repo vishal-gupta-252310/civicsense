@@ -21,7 +21,6 @@ def register(page, username=None, email=None, password="StrongPass123!"):
     page.goto(f"{BASE}/register/")
     page.fill('input[name="username"]', username)
     page.fill('input[name="email"]', email)
-    page.check('input[name="role"][value="citizen"]')
     page.fill('input[name="password1"]', password)
     page.fill('input[name="password2"]', password)
     page.click('button[type="submit"]')
@@ -38,7 +37,9 @@ def login(page, email="citizen1@test.com", password="TestPass123!"):
 
 
 def logout(page):
-    page.goto(f"{BASE}/logout/")
+    page.goto(f"{BASE}/")
+    page.wait_for_load_state("load")
+    page.click('form[action="/logout/"] button[type=submit]')
     page.wait_for_load_state("load")
 
 
@@ -47,15 +48,20 @@ def login_admin(page):
     login(page, email="admin1@test.com", password="TestPass123!")
 
 
+def wait_location(page):
+    page.wait_for_selector("#loc-coords:not(:empty)", state="visible", timeout=15000)
+    if page.locator("#manual-area").is_visible():
+        page.select_option("#manual-area", "28.6139,77.2090")
+
+
 def report_issue(page, description="Big pothole near the school gate on main road",
                  with_photo=False):
     page.goto(f"{BASE}/report/")
-    page.wait_for_selector("#manual-area", state="visible", timeout=15000)
-    page.select_option("#manual-area", "28.6139,77.2090")
+    wait_location(page)
     page.fill('textarea[name="description"]', description)
     if with_photo:
         page.locator('input[type="file"]').set_input_files(_create_test_image())
-    page.click('button[type="submit"]')
+    page.click("#submit-btn")
     page.wait_for_url(lambda url: "/issue/" in url)
     return page.url
 
@@ -76,7 +82,6 @@ class TestRegistration:
         page.goto(f"{BASE}/register/")
         page.fill('input[name="username"]', "citizen1")
         page.fill('input[name="email"]', "dup@test.com")
-        page.check('input[name="role"][value="citizen"]')
         page.fill('input[name="password1"]', "StrongPass123!")
         page.fill('input[name="password2"]', "StrongPass123!")
         page.click('button[type="submit"]')
@@ -121,20 +126,26 @@ class TestReportIssue:
         )
         expect(page.locator("body")).to_contain_text("Pothole")
 
-    def test_tc05_report_without_location_submit_disabled(self, page):
+    def test_tc05_location_auto_captured(self, page):
         login(page)
         page.goto(f"{BASE}/report/")
-        page.wait_for_selector("#manual-area", state="visible", timeout=15000)
-        page.fill('textarea[name="description"]', "No location report")
-        submit_btn = page.locator('button[type="submit"]')
-        expect(submit_btn).to_be_disabled()
+        wait_location(page)
+        loc_coords = page.locator("#loc-coords")
+        expect(loc_coords).not_to_have_text("")
+        submit_btn = page.locator("#submit-btn")
+        expect(submit_btn).to_be_enabled()
 
     def test_tc05_server_rejects_no_location(self, page):
         login(page)
         page.goto(f"{BASE}/report/")
-        page.wait_for_selector("#manual-area", state="visible", timeout=15000)
+        wait_location(page)
         page.fill('textarea[name="description"]', "No location report")
-        page.evaluate("document.getElementById('report-form').submit()")
+        page.evaluate("""
+            var f = document.getElementById('report-form');
+            f.elements['latitude'].value = '';
+            f.elements['longitude'].value = '';
+            f.submit();
+        """)
         page.wait_for_load_state("load")
         assert "/report/" in page.url
 
@@ -169,10 +180,9 @@ class TestDuplicateDetection:
         login(page)
         report_issue(page, "A big pothole near the school gate on main road")
         page.goto(f"{BASE}/report/")
-        page.wait_for_selector("#manual-area", state="visible", timeout=15000)
-        page.select_option("#manual-area", "28.6139,77.2090")
+        wait_location(page)
         page.fill('textarea[name="description"]', "another pothole near the school road")
-        page.click('button[type="submit"]')
+        page.click("#submit-btn")
         page.wait_for_url(lambda url: "/issue/" in url)
         expect(page.locator(".alert-warning, .alert")).to_contain_text("duplicate")
 
@@ -254,6 +264,7 @@ class TestUpvotes:
 
 class TestAnalytics:
     def test_tc14_analytics_for_admin(self, page):
+        login(page)
         login_admin(page)
         page.goto(f"{BASE}/analytics/")
         expect(page.locator("body")).to_contain_text("Analytics Dashboard")
@@ -295,7 +306,7 @@ class TestFormValidations:
     def test_report_description_has_constraints(self, page):
         login(page)
         page.goto(f"{BASE}/report/")
-        page.wait_for_selector("#manual-area", state="visible", timeout=15000)
+        wait_location(page)
         desc = page.locator('textarea[name="description"]')
         expect(desc).to_have_attribute("required", "")
         expect(desc).to_have_attribute("minlength", "10")
@@ -304,17 +315,16 @@ class TestFormValidations:
     def test_report_address_has_maxlength(self, page):
         login(page)
         page.goto(f"{BASE}/report/")
-        page.wait_for_selector("#manual-area", state="visible", timeout=15000)
+        wait_location(page)
         addr = page.locator('input[name="address"]')
         expect(addr).to_have_attribute("maxlength", "255")
 
     def test_report_short_description_rejected(self, page):
         login(page)
         page.goto(f"{BASE}/report/")
-        page.wait_for_selector("#manual-area", state="visible", timeout=15000)
-        page.select_option("#manual-area", "28.6139,77.2090")
+        wait_location(page)
         page.fill('textarea[name="description"]', "short")
-        page.click('button[type="submit"]')
+        page.click("#submit-btn")
         page.wait_for_load_state("load")
         assert "/report/" in page.url
 

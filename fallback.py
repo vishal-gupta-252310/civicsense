@@ -73,7 +73,10 @@ def classify(description):
     """Return {category, priority, summary} without any LLM."""
     category = _score_category(description)
     priority = _score_priority(description)
-    summary = re.sub(r"\s+", " ", description).strip()[:200]
+    if category == "Other":
+        summary = "Reported civic issue (%s priority)" % priority.lower()
+    else:
+        summary = "Reported %s issue (%s priority)" % (category.lower(), priority.lower())
     if not summary:
         summary = "No description provided."
     return {

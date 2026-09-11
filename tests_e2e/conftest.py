@@ -111,3 +111,12 @@ def base_url(servers):
 @pytest.fixture(scope="session")
 def api_url(servers):
     return servers["api_url"]
+
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    return {
+        **browser_context_args,
+        "geolocation": {"latitude": 28.6139, "longitude": 77.2090},
+        "permissions": ["geolocation"],
+    }

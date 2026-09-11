@@ -1,0 +1,12 @@
+{% extends "issues/base.html" %}
+{% block title %}Server Error · CivicSense{% endblock %}
+{% block content %}
+<div class="report-wrap">
+  <div class="report-card text-center">
+    <h1 class="display-5 text-muted">500</h1>
+    <p class="lead mb-1">Server Error</p>
+    <p class="text-muted">Something went wrong on our end — please try again shortly.</p>
+    <a class="btn btn-primary" href="{% url 'home' %}">Back to CivicSense</a>
+  </div>
+</div>
+{% endblock %}

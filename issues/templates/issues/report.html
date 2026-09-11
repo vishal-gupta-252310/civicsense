@@ -159,11 +159,18 @@
       return r.json().then(function(data){ return {ok: r.ok, data: data}; });
     })
       .then(function(res){
-        if (res.data.description) {
-          descInput.value = res.data.description;
+        if (!res.ok || res.data.error) {
+          aiBanner('err', res.data.error || 'AI service unavailable — try again later.');
+          aiMsg.scrollIntoView({behavior: 'smooth', block: 'center'});
+          return;
+        }
+        var text = (res.data.description || '').trim();
+        var hint = descInput.value.trim();
+        if (text && text !== hint) {
+          descInput.value = text;
           aiBanner('ok', 'AI wrote a good description above — edit it if needed.');
-        } else if (res.data.error) {
-          aiBanner('err', res.data.error);
+        } else if (text) {
+          aiBanner('err', 'AI returned the same text — try providing more detail.');
         } else {
           aiBanner('err', 'AI service unavailable — try again later.');
         }

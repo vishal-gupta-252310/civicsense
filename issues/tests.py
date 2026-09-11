@@ -9,12 +9,15 @@ import re
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from PIL import Image
 
+from .forms import LOGIN_FAILURE_LIMIT
 from .models import Category, Issue, StatusUpdate, Upvote, UserProfile
 from .services import classify_issue, find_duplicate
+from .views import permission_denied, server_error
 
 DEFAULT_AI_URL = "http://localhost:9"  # unreachable -> forces Django fallback
 
@@ -30,6 +33,7 @@ def make_photo():
 @override_settings(AI_SERVICE_URL=DEFAULT_AI_URL, ALLOWED_HOSTS=["testserver"])
 class CivicSenseTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.citizen = User.objects.create_user("cit", "cit@test.com", "StrongPass123!")
         UserProfile.objects.create(user=self.citizen, role="citizen")
         self.admin = User.objects.create_user("adm", "adm@test.com", "StrongPass123!")
@@ -56,7 +60,6 @@ class CivicSenseTests(TestCase):
             {
                 "username": "newuser",
                 "email": "new@test.com",
-                "role": "citizen",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
             },
@@ -67,11 +70,119 @@ class CivicSenseTests(TestCase):
             UserProfile.objects.filter(user__username="newuser", role="citizen").exists()
         )
 
+    def test_registration_role_fields_cannot_create_admin(self):
+        resp = self.client.post(
+            "/register/",
+            {
+                "username": "raider",
+                "email": "raider@test.com",
+                "role": "admin",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        user = User.objects.get(username="raider")
+        self.assertFalse(user.is_staff)
+        self.assertEqual(user.profile.role, "citizen")
+
+    def test_registration_duplicate_email_rejected(self):
+        self.client.post(
+            "/register/",
+            {
+                "username": "firstuser",
+                "email": "dup@test.com",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+        self.client.logout()
+        resp = self.client.post(
+            "/register/",
+            {
+                "username": "seconduser",
+                "email": "DUP@test.com",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "An account already exists for that email.")
+        self.assertFalse(User.objects.filter(username="seconduser").exists())
+
     def test_tc02_login_valid(self):
         self.assertTrue(self.client.login(username="cit", password="StrongPass123!"))
 
     def test_tc03_login_wrong_password(self):
         self.assertFalse(self.client.login(username="cit", password="wrong"))
+
+    def test_login_errors_do_not_reveal_registered_emails(self):
+        wrong_password = self.client.post(
+            "/login/", {"email": "cit@test.com", "password": "wrong"}
+        )
+        unknown_email = self.client.post(
+            "/login/", {"email": "nobody@test.com", "password": "whatever"}
+        )
+        self.assertEqual(wrong_password.status_code, 200)
+        self.assertEqual(unknown_email.status_code, 200)
+        self.assertNotContains(wrong_password, "No account found")
+        self.assertContains(wrong_password, "correct email and password")
+        self.assertContains(unknown_email, "correct email and password")
+
+    def test_login_rate_limit_blocks_after_failures(self):
+        for _ in range(LOGIN_FAILURE_LIMIT):
+            self.client.post(
+                "/login/", {"email": "cit@test.com", "password": "wrong"}
+            )
+        blocked = self.client.post(
+            "/login/", {"email": "cit@test.com", "password": "wrong"}
+        )
+        self.assertEqual(blocked.status_code, 200)
+        self.assertContains(blocked, "Too many failed sign-in attempts")
+        correct_during_lockout = self.client.post(
+            "/login/", {"email": "cit@test.com", "password": "StrongPass123!"}
+        )
+        self.assertEqual(correct_during_lockout.status_code, 200)
+        self.assertContains(correct_during_lockout, "Too many failed sign-in attempts")
+
+    def test_login_next_param_no_open_redirect(self):
+        resp = self.client.post(
+            "/login/?next=https://evil.example/phish",
+            {"email": "cit@test.com", "password": "StrongPass123!"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url.split("//")[-1], "/")
+
+    def test_security_headers_present(self):
+        self.client.force_login(self.citizen)
+        resp = self.client.get("/", secure=True)
+        self.assertIn("default-src 'self'", resp["Content-Security-Policy"])
+        self.assertIn("frame-ancestors 'none'", resp["Content-Security-Policy"])
+        self.assertEqual(resp["Strict-Transport-Security"].split(";")[0].strip().split(
+            "=", 1)[1], "31536000")
+        self.assertEqual(resp["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(resp["X-Frame-Options"], "DENY")
+        self.assertIn("Referrer-Policy", resp)
+        self.assertIn("https://*.basemaps.cartocdn.com", resp["Content-Security-Policy"])
+        self.assertNotIn("tile.openstreetmap.org", resp["Content-Security-Policy"])
+
+    def test_logout_requires_post(self):
+        self.client.force_login(self.citizen)
+        get_resp = self.client.get("/logout/")
+        self.assertEqual(get_resp.status_code, 405)
+        self.assertTrue(self.client.get("/").content)  # still logged in
+        resp = self.client.post("/logout/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/")
+        blocked = self.client.get("/report/")
+        self.assertEqual(blocked.status_code, 302)
+        self.assertIn("/login/", blocked.url)
+
+    def test_django_admin_not_at_default_path(self):
+        resp = self.client.get("/admin/")
+        self.assertEqual(resp.status_code, 404)
+        moved = self.client.get("/internal/_console/")
+        self.assertIn(moved.status_code, (200, 301, 302))
 
     # TC04-TC05: reporting
     def test_tc04_report_issue_with_photo_and_location(self):
@@ -217,6 +328,45 @@ class CivicSenseTests(TestCase):
         )
         self.assertEqual(resp.status_code, 302)  # redirected to login
 
+    def test_citizen_status_post_ignored_server_side(self):
+        # CIV-01 depth: a non-admin cannot force a status change even by
+        # posting the status form directly (view requires staff).
+        self.client.force_login(self.citizen)
+        self.report("pothole near the park")
+        issue = Issue.objects.latest("id")
+        resp = self.client.post(
+            f"/issue/{issue.pk}/",
+            {"new_status": "resolved", "note": "forced"},
+        )
+        self.assertEqual(resp.status_code, 200)  # form re-rendered for citizen
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, "open")
+        self.assertEqual(issue.status_updates.count(), 0)
+
+    def test_withdraw_own_issue(self):
+        self.client.force_login(self.citizen)
+        self.report("pothole near the park")
+        issue = Issue.objects.latest("id")
+        confirm = self.client.get(f"/issue/{issue.pk}/withdraw/")
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, "Withdraw this report?")
+        resp = self.client.post(f"/issue/{issue.pk}/withdraw/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Issue.objects.filter(pk=issue.pk).exists())
+
+    def test_withdraw_forbidden_for_other_users(self):
+        self.client.force_login(self.citizen)
+        self.report("pothole near the park")
+        issue = Issue.objects.latest("id")
+        self.client.force_login(self.admin)
+        self.assertEqual(
+            self.client.get(f"/issue/{issue.pk}/withdraw/").status_code, 403
+        )
+        self.assertEqual(
+            self.client.post(f"/issue/{issue.pk}/withdraw/").status_code, 403
+        )
+        self.assertTrue(Issue.objects.filter(pk=issue.pk).exists())
+
     def test_resolved_sets_resolved_at(self):
         self.client.force_login(self.citizen)
         self.report("pothole near the park")
@@ -240,6 +390,15 @@ class FallbackClassifierTests(TestCase):
         self.assertEqual(classify("street light not working")["category"], "Streetlight")
         self.assertEqual(classify("water leak from pipe")["category"], "Water")
         self.assertEqual(classify("something totally unrelated")["category"], "Other")
+
+    def test_fallback_summary_is_not_an_echo(self):
+        # CIV-14: the fallback summary must be a short headline, never a copy
+        # of the whole description.
+        from fallback import classify
+
+        result = classify("big pothole in the road")
+        self.assertNotEqual(result["summary"], "big pothole in the road")
+        self.assertTrue(result["summary"])
 
     def test_find_duplicate_returns_none_on_empty(self):
         self.assertIsNone(find_duplicate("anything", 28.6, 77.2))
@@ -274,6 +433,18 @@ class LLMSettingsTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.llm_platform, "groq")
         self.assertEqual(self.user.profile.llm_api_key, "gsk_test")
+        self.assertEqual(self.user.profile.llm_model, "groq/qwen1.5-1.8b-chat")
+
+    def test_save_settings_strips_double_prefix(self):
+        # CIV-14: a model submitted with its provider prefix already attached
+        # must not be double-prefixed again into "groq/groq/...".
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            "/settings/llm/",
+            {"platform": "groq", "api_key": "gsk_test", "model": "groq/qwen1.5-1.8b-chat"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.llm_model, "groq/qwen1.5-1.8b-chat")
 
     def test_unknown_platform_rejected(self):
@@ -314,6 +485,32 @@ class LLMSettingsTests(TestCase):
         )
         self.assertEqual(resp.status_code, 502)
         self.assertIn("error", resp.json())
+
+    def test_key_is_write_only_not_echoed(self):
+        # CIV-09: API key must never be rendered into the page HTML;
+        # a blank field must leave the saved key unchanged.
+        self.user.profile.llm_platform = "groq"
+        self.user.profile.llm_api_key = "gsk_secretkey123"
+        self.user.profile.llm_model = "groq/qwen3.6-27b"
+        self.user.profile.save()
+        self.client.force_login(self.user)
+        resp = self.client.get("/settings/llm/")
+        self.assertNotContains(resp, "gsk_secretkey123")
+        self.assertContains(resp, "enter a new one only to replace it")
+        # blank api_key keeps the saved key
+        self.client.post(
+            "/settings/llm/",
+            {"platform": "groq", "api_key": "", "model": "qwen1.5-1.8b-chat"},
+        )
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.llm_api_key, "gsk_secretkey123")
+        # non-blank api_key replaces it
+        self.client.post(
+            "/settings/llm/",
+            {"platform": "groq", "api_key": "gsk_newkey", "model": "qwen1.5-1.8b-chat"},
+        )
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.llm_api_key, "gsk_newkey")
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -398,3 +595,29 @@ class PasswordResetTests(TestCase):
         resp = self.client.get("/password-reset/done/")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Check your email")
+
+
+@override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+class ErrorPageTests(TestCase):
+    # CIV-15: error pages must be branded (base.html) with a way back home,
+    # instead of Django's default bare "Not Found".
+
+    def test_404_via_request_cycle_is_branded(self):
+        resp = self.client.get("/this-route-cannot-exist/")
+        self.assertEqual(resp.status_code, 404)
+        self.assertContains(resp, "CivicSense", status_code=404)
+        self.assertContains(resp, "not found", status_code=404)
+
+    def test_403_handler_renders_branded_page(self):
+        request = RequestFactory().get("/")
+        resp = permission_denied(request)
+        self.assertEqual(resp.status_code, 403)
+        self.assertContains(resp, "CivicSense", status_code=403)
+        self.assertContains(resp, "Forbidden", status_code=403)
+
+    def test_500_handler_renders_branded_page(self):
+        request = RequestFactory().get("/")
+        resp = server_error(request)
+        self.assertEqual(resp.status_code, 500)
+        self.assertContains(resp, "CivicSense", status_code=500)
+        self.assertContains(resp, "Server Error", status_code=500)

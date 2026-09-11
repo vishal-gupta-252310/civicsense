@@ -1,0 +1,12 @@
+{% extends "issues/base.html" %}
+{% block title %}Forbidden · CivicSense{% endblock %}
+{% block content %}
+<div class="report-wrap">
+  <div class="report-card text-center">
+    <h1 class="display-5 text-muted">403</h1>
+    <p class="lead mb-1">Forbidden</p>
+    <p class="text-muted">You don't have permission to see this page.</p>
+    <a class="btn btn-primary" href="{% url 'home' %}">Back to CivicSense</a>
+  </div>
+</div>
+{% endblock %}

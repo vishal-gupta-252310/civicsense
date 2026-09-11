@@ -1,0 +1,12 @@
+{% extends "issues/base.html" %}
+{% block title %}Page not found · CivicSense{% endblock %}
+{% block content %}
+<div class="report-wrap">
+  <div class="report-card text-center">
+    <h1 class="display-5 text-muted">404</h1>
+    <p class="lead mb-1">Page not found</p>
+    <p class="text-muted">The page you're looking for doesn't exist or has been moved.</p>
+    <a class="btn btn-primary" href="{% url 'home' %}">Back to CivicSense</a>
+  </div>
+</div>
+{% endblock %}

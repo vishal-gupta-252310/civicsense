@@ -6,7 +6,12 @@ import requests
 
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import (
+    HttpResponseBadRequest,
+    HttpResponseForbidden,
+    HttpResponseNotAllowed,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -34,7 +39,7 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect("home")
     if request.method == "POST":
-        form = EmailLoginForm(request.POST)
+        form = EmailLoginForm(request.POST, request=request)
         if form.is_valid():
             login(request, form.cleaned_data["user"])
             return redirect("home")
@@ -44,6 +49,10 @@ def login_view(request):
 
 
 def logout_view(request):
+    # GET logout is a CSRF-prone pattern (and shares the URL with any naive
+    # <a> link or prefetcher); require a POST with the CSRF token.
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
     logout(request)
     return redirect("home")
 
@@ -126,11 +135,23 @@ def issue_detail_view(request, pk):
         {
             "issue": issue,
             "is_staff": is_staff,
+            "is_owner": issue.reporter == request.user,
             "form": form,
             "upvote_count": issue.upvotes.count(),
             "has_upvoted": has_upvoted,
         },
     )
+
+
+@login_required
+def withdraw_view(request, pk):
+    issue = get_object_or_404(Issue, pk=pk)
+    if issue.reporter != request.user:
+        return HttpResponseForbidden("You can only withdraw your own reports.")
+    if request.method == "POST":
+        issue.delete()
+        return redirect("home")
+    return render(request, "issues/withdraw_confirm.html", {"issue": issue})
 
 
 @login_required
@@ -201,7 +222,16 @@ def llm_settings_view(request):
                 status=400,
             )
         profile.llm_platform = platform
-        profile.llm_api_key = api_key
+        # Write-only key: a blank field means "keep the saved key".
+        if api_key:
+            profile.llm_api_key = api_key
+        # Strip any provider prefix the dropdown may have included so
+        # full_model_id() doesn't double-prefix (e.g. "groq/groq/...").
+        _STRIP_PREFIXES = ("groq/", "gemini/", "openrouter/", "openai/", "anthropic/", "mistral/", "deepseek/", "together_ai/")
+        for _pfx in _STRIP_PREFIXES:
+            if model_id.startswith(_pfx):
+                model_id = model_id[len(_pfx):]
+                break
         profile.llm_model = full_model_id(platform, model_id) if platform and model_id else ""
         profile.save(update_fields=["llm_platform", "llm_api_key", "llm_model"])
         return redirect("llm_settings")
@@ -212,7 +242,8 @@ def llm_settings_view(request):
             "platforms": PLATFORMS,
             "saved_platform": profile.llm_platform,
             "saved_model": profile.llm_model,
-            "saved_key": profile.llm_api_key,
+            # Never send the stored key back to the page (CIV-09).
+            "saved_key_configured": bool(profile.llm_api_key),
         },
     )
 
@@ -282,3 +313,15 @@ def analytics_view(request):
             "by_priority": json.dumps(by_priority),
         },
     )
+
+
+def page_not_found(request, exception=None):
+    return render(request, "issues/404.html", status=404)
+
+
+def permission_denied(request, exception=None):
+    return render(request, "issues/403.html", status=403)
+
+
+def server_error(request):
+    return render(request, "issues/500.html", status=500)

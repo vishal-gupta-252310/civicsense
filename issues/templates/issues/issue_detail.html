@@ -74,6 +74,10 @@
               {% if has_upvoted %}Remove upvote{% else %}Upvote this issue{% endif %}
             </button>
           </form>
+          {% if is_owner and not is_staff %}
+          <a class="btn btn-outline-danger btn-sm w-100 mt-2" id="withdraw-btn"
+             href="{% url 'withdraw_issue' issue.pk %}">Withdraw my report</a>
+          {% endif %}
         </div>
       </div>
       <div class="col-md-7">

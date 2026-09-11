@@ -20,9 +20,14 @@ from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # Keep Django admin off the well-known /admin/ path to reduce discovery.
+    path("internal/_console/", admin.site.urls),
     path("", include("issues.urls")),
 ]
+
+handler404 = "issues.views.page_not_found"
+handler403 = "issues.views.permission_denied"
+handler500 = "issues.views.server_error"
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

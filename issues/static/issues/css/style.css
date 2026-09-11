@@ -256,55 +256,6 @@ textarea.form-control { padding-top: .65rem; }
 }
 .errorlist li::before { content: '⚠'; }
 
-.role-pills { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-.role-pill { position: relative; cursor: pointer; display: block; }
-.role-pill input {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  pointer-events: none;
-}
-.role-pill .cardish {
-  display: block;
-  border: 1.5px solid #d7e3dc;
-  border-radius: .85rem;
-  padding: 1rem .75rem;
-  text-align: center;
-  transition: all .15s ease;
-  background: #fff;
-  height: 100%;
-}
-.role-pill:hover .cardish { border-color: var(--accent-light); }
-.role-pill input:checked + .cardish {
-  border-color: var(--primary);
-  background: #eef6f1;
-  box-shadow: 0 0 0 4px rgba(50, 109, 91, .12);
-}
-.role-pill .role-ico {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #e8f1ec;
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto .45rem;
-}
-.role-pill .cardish strong {
-  display: block;
-  color: var(--primary-dark);
-  font-size: .9rem;
-}
-.role-pill .cardish small { color: #6b7a73; font-size: .75rem; }
-.role-pill input:checked + .cardish .role-ico { background: var(--primary); color: #fff; }
-
 /* ---------- Report form ---------- */
 .report-wrap { padding: 1.5rem 0 3rem; }
 .report-card {

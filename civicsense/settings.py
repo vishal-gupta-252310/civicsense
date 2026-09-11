@@ -36,6 +36,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "civicsense.middleware.SecurityHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -149,6 +150,16 @@ EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
 # Public site URL. Used as the domain in password-reset emails so they never
 # reference the request Host (e.g. "localhost"). Change to the real deploy URL.
 SITE_URL = env("SITE_URL", default="https://civicsense-django.onrender.com")
+
+# HSTS: tell browsers to only ever talk HTTPS. Applied by SecurityMiddleware
+# on secure requests. Disable (0) during early http-only testing.
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# TLS terminates at the reverse proxy (Cloudflare/Render). Trust its
+# X-Forwarded-Proto so is_secure()/HSTS work in production.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 LOGGING = {
     "version": 1,
