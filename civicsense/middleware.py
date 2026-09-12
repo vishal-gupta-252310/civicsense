@@ -2,7 +2,7 @@
 
 Inline scripts/styles are allowed because the templates rely on them;
 everything else is locked down to same-origin plus the external origins the
-templates actually use (Bootstrap, Leaflet, Chart.js, cloudinary, CARTO map
+templates actually use (Bootstrap, Leaflet, Chart.js, cloudinary, Esri map
 tiles, reverse-geocoding and IP-lookup endpoints).
 """
 

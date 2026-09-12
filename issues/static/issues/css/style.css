@@ -245,7 +245,7 @@ a { color: var(--primary); }
 textarea.form-control { padding-top: .65rem; }
 
 .helptext, .form-text { font-size: .8rem; color: #6b7a73; }
-.errorlist { list-style: none; padding: 0; margin: 0 0 .35rem; }
+.errorlist { list-style: none; padding: 0; margin: 0 0 .5rem; }
 .errorlist li {
   color: var(--high);
   font-size: .82rem;
@@ -255,6 +255,14 @@ textarea.form-control { padding-top: .65rem; }
   gap: .3rem;
 }
 .errorlist li::before { content: '⚠'; }
+.errorlist.nonfield {
+  background: #fdeeee;
+  border: 1px solid #f3d2cd;
+  border-radius: .65rem;
+  padding: .65rem .85rem;
+  margin-bottom: 1rem;
+}
+.errorlist.nonfield li { font-size: .85rem; }
 
 /* ---------- Report form ---------- */
 .report-wrap { padding: 1.5rem 0 3rem; }

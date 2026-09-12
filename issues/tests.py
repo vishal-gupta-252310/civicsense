@@ -138,12 +138,12 @@ class CivicSenseTests(TestCase):
             "/login/", {"email": "cit@test.com", "password": "wrong"}
         )
         self.assertEqual(blocked.status_code, 429)
-        self.assertContains(blocked, "Too many failed sign-in attempts")
+        self.assertContains(blocked, "Too many failed sign-in attempts", status_code=429)
         correct_during_lockout = self.client.post(
             "/login/", {"email": "cit@test.com", "password": "StrongPass123!"}
         )
         self.assertEqual(correct_during_lockout.status_code, 429)
-        self.assertContains(correct_during_lockout, "Too many failed sign-in attempts")
+        self.assertContains(correct_during_lockout, "Too many failed sign-in attempts", status_code=429)
 
     def test_login_next_param_no_open_redirect(self):
         resp = self.client.post(
@@ -163,7 +163,7 @@ class CivicSenseTests(TestCase):
         self.assertEqual(resp["X-Content-Type-Options"], "nosniff")
         self.assertEqual(resp["X-Frame-Options"], "DENY")
         self.assertIn("Referrer-Policy", resp)
-        self.assertIn("https://*.basemaps.cartocdn.com", resp["Content-Security-Policy"])
+        self.assertIn("https://server.arcgisonline.com", resp["Content-Security-Policy"])
         self.assertNotIn("tile.openstreetmap.org", resp["Content-Security-Policy"])
 
     def test_logout_requires_post(self):
@@ -271,6 +271,19 @@ class CivicSenseTests(TestCase):
         self.assertEqual(issue.status, "progress")
         self.assertEqual(issue.status_updates.count(), 1)
         self.assertEqual(issue.status_updates.first().staff, self.admin)
+
+    # CIV-18: status dropdown defaults to the issue's current status
+    def test_status_dropdown_defaults_to_current_status(self):
+        self.client.force_login(self.citizen)
+        self.report("pothole near the park")
+        issue = Issue.objects.latest("id")
+        self.client.force_login(self.admin)
+        resp = self.client.get(f"/issue/{issue.pk}/")
+        self.assertContains(resp, '<option value="open" selected')
+        issue.status = "progress"
+        issue.save()
+        resp = self.client.get(f"/issue/{issue.pk}/")
+        self.assertContains(resp, '<option value="progress" selected')
 
     # TC11: citizen status tracking
     def test_tc11_citizen_sees_status(self):

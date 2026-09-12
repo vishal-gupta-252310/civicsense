@@ -132,7 +132,9 @@ def issue_detail_view(request, pk):
             issue.save()
             return redirect("issue_detail", pk=issue.pk)
     else:
-        form = StatusUpdateForm()
+        # Default the dropdown to the issue's current status so an admin
+        # changing it always starts from "where it already is".
+        form = StatusUpdateForm(initial={"new_status": issue.status})
     has_upvoted = Upvote.objects.filter(issue=issue, user=request.user).exists()
     return render(
         request,

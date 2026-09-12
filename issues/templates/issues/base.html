@@ -29,9 +29,9 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'analytics' %}">Analytics</a></li>
           {% endif %}
         </ul>
-        <ul class="navbar-nav">
+        <ul class="navbar-nav align-items-center">
           {% if request.user.is_authenticated %}
-          <li class="nav-item"><span class="nav-link text-white-50">{{ request.user.email|default:request.user.username }}</span></li>
+          <li class="nav-item"><span class="nav-link text-white text-opacity-75">{{ request.user.email|default:request.user.username }}</span></li>
           {% if request.user.profile.llm_platform %}
           <li class="nav-item">
             <a class="nav-link" href="{% url 'llm_settings' %}" title="AI settings">

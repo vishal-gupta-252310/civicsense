@@ -323,12 +323,19 @@ class StatusUpdateForm(forms.Form):
     new_status = forms.ChoiceField(
         choices=Issue.STATUS,
         label="New status",
-        widget=forms.Select(attrs={"required": True}),
+        widget=forms.Select(
+            attrs={"required": True, "class": "form-select"}
+        ),
     )
     note = forms.CharField(
         required=False,
         max_length=1000,
         widget=forms.Textarea(
-            attrs={"rows": 2, "placeholder": "Optional note", "maxlength": 1000}
+            attrs={
+                "rows": 2,
+                "class": "form-control",
+                "placeholder": "Optional note",
+                "maxlength": 1000,
+            }
         ),
     )
